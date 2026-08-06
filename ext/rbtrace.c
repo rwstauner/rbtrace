@@ -1107,7 +1107,7 @@ sigurg(int signal)
 #if !defined(HAVE_RB_POSTPONED_JOB_REGISTER_ONE) && defined(RUBY_VM)
 static VALUE signal_handler_proc;
 static VALUE
-signal_handler_wrapper(VALUE arg, VALUE ctx)
+signal_handler_wrapper(RB_BLOCK_CALL_FUNC_ARGLIST(arg, ctx))
 {
   static int in_signal_handler = 0;
   if (in_signal_handler) return Qnil;
