@@ -51,13 +51,45 @@ assert_trace() {
   echo
 }
 
+assert_dump() {
+  dump_type="$1"
+  dump=$(mktemp)
+  rm -f "$dump"
+
+  echo ------------------------------------------
+  echo ./bin/rbtrace -p $PID --"$dump_type"="$dump"
+  echo ------------------------------------------
+  if ! output=$(bundle exec ./bin/rbtrace -p $PID --"$dump_type"="$dump" 2>&1); then
+    echo "$output"
+    rm -f "$dump" "$dump.tmp"
+    return 1
+  fi
+  echo "$output"
+
+  tries=0
+  while [ "$tries" -lt 50 ] && [ ! -s "$dump" ]; do
+    sleep 0.1
+    tries=$((tries + 1))
+  done
+
+  if [ ! -s "$dump" ]; then
+    echo "Expected $dump_type to be written to $dump"
+    rm -f "$dump" "$dump.tmp"
+    return 1
+  fi
+
+  rm -f "$dump" "$dump.tmp"
+  echo
+}
+
 trace -m Test.run --devmode
 trace -m sleep
 trace -m sleep Dir.chdir Dir.pwd Process.pid "String#gsub" "String#*"
 trace -m "Kernel#"
 trace -m "String#gsub(self,@test)" "String#*(self,__source__)" "String#multiply_vowels(self,self.length,num)"
 assert_trace '=> 2' -e 'p(1 + 1)'
-trace -h
+assert_dump heapdump
+assert_dump shapesdump
 trace --gc --slow=200
 trace --gc -m Dir.
 trace --slow=250
