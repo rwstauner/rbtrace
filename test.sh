@@ -82,11 +82,34 @@ assert_dump() {
   echo
 }
 
+assert_timed_trace() {
+  expected="$1"
+  shift
+  output=$(mktemp)
+
+  echo ------------------------------------------
+  echo ./bin/rbtrace -p $PID "$@"
+  echo ------------------------------------------
+  bundle exec ./bin/rbtrace -p $PID "$@" >"$output" 2>&1 &
+  tracer_pid=$!
+  sleep 2
+  kill "$tracer_pid" 2>/dev/null || true
+  wait "$tracer_pid" 2>/dev/null || true
+  cat "$output"
+  if ! grep -F "$expected" "$output" >/dev/null; then
+    rm -f "$output"
+    return 1
+  fi
+  rm -f "$output"
+  echo
+}
+
 trace -m Test.run --devmode
 trace -m sleep
 trace -m sleep Dir.chdir Dir.pwd Process.pid "String#gsub" "String#*"
 trace -m "Kernel#"
 trace -m "String#gsub(self,@test)" "String#*(self,__source__)" "String#multiply_vowels(self,self.length,num)"
+assert_timed_trace 'String#upcase(self.class=String)' -m 'String#upcase(self.class)'
 assert_trace '=> 2' -e 'p(1 + 1)'
 assert_dump heapdump
 assert_dump shapesdump

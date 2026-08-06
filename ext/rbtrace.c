@@ -307,6 +307,18 @@ rbtrace__send_names(ID mid, VALUE klass)
   }
 }
 
+typedef struct {
+  VALUE proc;
+  VALUE receiver;
+} expr_proc_call_t;
+
+static VALUE
+call_expr_proc(VALUE data)
+{
+  expr_proc_call_t *args = (expr_proc_call_t *)data;
+  return rb_funcall(args->proc, rb_intern("call"), 1, args->receiver);
+}
+
 static int in_event_hook = 0;
 
 static void
@@ -491,8 +503,16 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
             val = rb_inspect(rb_ivar_get(self, rb_intern(expr)));
 
           } else {
-            snprintf(buffer, len+150, "(begin; ObjectSpace._id2ref(%ld).instance_eval{ %s }; rescue Exception => e; e; end).inspect", NUM2LONG(rb_obj_id(self)), expr);
-            val = rb_eval_string_protect(buffer, 0);
+            int state = 0;
+            VALUE expr_proc;
+            expr_proc_call_t args;
+            snprintf(buffer, len+150, "proc { |__rbtrace_receiver__| (begin; __rbtrace_receiver__.instance_eval { %s }; rescue Exception => e; e; end).inspect }", expr);
+            expr_proc = rb_eval_string_protect(buffer, &state);
+            if (state == 0) {
+              args.proc = expr_proc;
+              args.receiver = self;
+              val = rb_protect(call_expr_proc, (VALUE)&args, &state);
+            }
           }
 
           if (RTEST(val) && TYPE(val) == T_STRING) {
